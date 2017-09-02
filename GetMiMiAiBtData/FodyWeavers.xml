@@ -2,12 +2,13 @@
 <Weavers>
 <Costura>
 <IncludeAssemblies>
-EntityFramework
-EntityFramework.SqlServer
-System.Data.SQLite
-System.Data.SQLite.EF6
-System.Data.SQLite.Linq
-HtmlAgilityPack
+  EntityFramework
+  EntityFramework.SqlServer
+  System.Data.SQLite
+  System.Data.SQLite.EF6
+  System.Data.SQLite.Linq
+  HtmlAgilityPack
+  BetterHttpClient
 </IncludeAssemblies>
   <Unmanaged32Assemblies>
 SQLite.Interop

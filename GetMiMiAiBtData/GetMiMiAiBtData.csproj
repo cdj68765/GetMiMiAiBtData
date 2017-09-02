@@ -36,6 +36,7 @@
   <ItemGroup>
     <Reference Include="BetterHttpClient, Version=1.0.7.2, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\BetterHttpClient.1.0.7.2\lib\net45\BetterHttpClient.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="Costura, Version=1.6.2.0, Culture=neutral, PublicKeyToken=9919ef960d84173d, processorArchitecture=MSIL">
       <HintPath>..\packages\Costura.Fody.1.6.2\lib\dotnet\Costura.dll</HintPath>
@@ -49,9 +50,6 @@
     </Reference>
     <Reference Include="HtmlAgilityPack, Version=1.5.1.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
       <HintPath>..\packages\HtmlAgilityPack.1.5.1\lib\Net45\HtmlAgilityPack.dll</HintPath>
-    </Reference>
-    <Reference Include="SocksSharp, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\SocksSharp.1.0.2\lib\SocksSharp.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.ComponentModel.DataAnnotations" />
@@ -84,6 +82,25 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="SocksSharp\Extensions\HttpHeadersExtensions.cs" />
+    <Compile Include="SocksSharp\Extensions\StringExtensions.cs" />
+    <Compile Include="SocksSharp\Helpers\ContentHelper.cs" />
+    <Compile Include="SocksSharp\Helpers\ExceptionHelper.cs" />
+    <Compile Include="SocksSharp\Helpers\ReceiveHelper.cs" />
+    <Compile Include="SocksSharp\ProxyClientHandler.cs" />
+    <Compile Include="SocksSharp\Proxy\Clients\Socks4.cs" />
+    <Compile Include="SocksSharp\Proxy\Clients\Socks4a.cs" />
+    <Compile Include="SocksSharp\Proxy\Clients\Socks5.cs" />
+    <Compile Include="SocksSharp\Proxy\IProxy.cs" />
+    <Compile Include="SocksSharp\Proxy\IProxyClient.cs" />
+    <Compile Include="SocksSharp\Proxy\IProxySettings.cs" />
+    <Compile Include="SocksSharp\Proxy\IProxySettingsFluent.cs" />
+    <Compile Include="SocksSharp\Proxy\ProxyClient.cs" />
+    <Compile Include="SocksSharp\Proxy\ProxyException.cs" />
+    <Compile Include="SocksSharp\Proxy\ProxySettings.cs" />
+    <Compile Include="SocksSharp\Proxy\Request\RequestBuilder.cs" />
+    <Compile Include="SocksSharp\Proxy\Response\IResponseBuilder.cs" />
+    <Compile Include="SocksSharp\Proxy\Response\ResponseBuilder.cs" />
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
@@ -111,7 +128,7 @@
     <None Include="FodyWeavers.xml" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="SocksSharp.xml" />
+    <Content Include="SocksSharp\SocksSharp.csproj" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
