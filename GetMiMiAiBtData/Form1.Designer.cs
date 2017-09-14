@@ -28,12 +28,45 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
+            this.Adress = new System.Windows.Forms.TextBox();
+            this.listBox1 = new System.Windows.Forms.ListBox();
+            this.SuspendLayout();
+            // 
+            // Adress
+            // 
+            this.Adress.Location = new System.Drawing.Point(12, 12);
+            this.Adress.Name = "Adress";
+            this.Adress.Size = new System.Drawing.Size(160, 21);
+            this.Adress.TabIndex = 0;
+            this.Adress.Text = "http://www.mimirrr.com";
+            // 
+            // listBox1
+            // 
+            this.listBox1.FormattingEnabled = true;
+            this.listBox1.ItemHeight = 12;
+            this.listBox1.Location = new System.Drawing.Point(12, 39);
+            this.listBox1.Name = "listBox1";
+            this.listBox1.Size = new System.Drawing.Size(160, 412);
+            this.listBox1.TabIndex = 1;
+            // 
+            // Form1
+            // 
+            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.ClientSize = new System.Drawing.Size(711, 458);
+            this.Controls.Add(this.listBox1);
+            this.Controls.Add(this.Adress);
+            this.Name = "Form1";
             this.Text = "Form1";
+            this.ResumeLayout(false);
+            this.PerformLayout();
+
         }
 
         #endregion
+
+        private System.Windows.Forms.TextBox Adress;
+        private System.Windows.Forms.ListBox listBox1;
     }
 }
 

@@ -145,14 +145,13 @@ namespace SocksSharp
                 var contentType = responseMessage.Content.Headers.ContentType;
                 contentType.CharSet = await getCharSetAsync(responseMessage.Content);
                 return responseMessage;
-            });
+            }, cancellationToken);
         }
 
         #region Methods (private)
 
         private async Task SendDataAsync(HttpRequestMessage request, CancellationToken ct)
         {
-            byte[] buffer;
             var hasContent = request.Content != null;
 
             var requestBuilder = UseCookies 
@@ -160,7 +159,7 @@ namespace SocksSharp
                 : new RequestBuilder(request);
 
             //Send starting line
-            buffer = requestBuilder.BuildStartingLine();
+            var buffer = requestBuilder.BuildStartingLine();
             await connectionCommonStream.WriteAsync(buffer, 0, buffer.Length, ct);
 
             //Send headers
@@ -192,9 +191,7 @@ namespace SocksSharp
             {
                 try
                 {
-                    SslStream sslStream;
-
-                    sslStream = new SslStream(connectionNetworkStream, false, ServerCertificateCustomValidationCallback);
+                    var sslStream = new SslStream(connectionNetworkStream, false, ServerCertificateCustomValidationCallback);
 
                     sslStream.AuthenticateAsClient(uri.Host);
                     connectionCommonStream = sslStream;
