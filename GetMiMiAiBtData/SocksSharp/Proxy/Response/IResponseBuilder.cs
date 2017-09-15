@@ -11,6 +11,7 @@ namespace SocksSharp.Proxy.Response
 
         Task<HttpResponseMessage> GetResponseAsync(HttpRequestMessage request, Stream stream);
 
-        Task<HttpResponseMessage> GetResponseAsync(HttpRequestMessage request, Stream stream, CancellationToken cancellationToken);
+        Task<HttpResponseMessage> GetResponseAsync(HttpRequestMessage request, Stream stream,
+            CancellationToken cancellationToken);
     }
 }

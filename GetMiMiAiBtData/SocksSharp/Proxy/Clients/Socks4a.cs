@@ -20,35 +20,31 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
  */
 
-using System;
-using System.Text;
 using System.Net.Sockets;
+using System.Text;
 
 namespace SocksSharp.Proxy
 {
     public class Socks4a : Socks4
     {
-        internal protected override void SendCommand(NetworkStream nStream, byte command, string destinationHost, int destinationPort)
+        protected internal override void SendCommand(NetworkStream nStream, byte command, string destinationHost,
+            int destinationPort)
         {
-            byte[] dstPort = GetPortBytes(destinationPort);
-            byte[] dstIp = { 0, 0, 0, 1 };
+            var dstPort = GetPortBytes(destinationPort);
+            byte[] dstIp = {0, 0, 0, 1};
 
-            byte[] userId = new byte[0];
+            var userId = new byte[0];
             if (Settings.Credentials != null)
-            {
-                if (!String.IsNullOrEmpty(Settings.Credentials.UserName))
-                {
+                if (!string.IsNullOrEmpty(Settings.Credentials.UserName))
                     userId = Encoding.ASCII.GetBytes(Settings.Credentials.UserName);
-                }
-            }
 
-            byte[] dstAddr = Encoding.ASCII.GetBytes(destinationHost);
+            var dstAddr = Encoding.ASCII.GetBytes(destinationHost);
 
             // +----+----+----+----+----+----+----+----+----+----+....+----+----+----+....+----+
             // | VN | CD | DSTPORT |      DSTIP        | USERID       |NULL| DSTADDR      |NULL|
             // +----+----+----+----+----+----+----+----+----+----+....+----+----+----+....+----+
             //    1    1      2              4           variable       1    variable        1 
-            byte[] request = new byte[10 + userId.Length + dstAddr.Length];
+            var request = new byte[10 + userId.Length + dstAddr.Length];
 
             request[0] = VersionNumber;
             request[1] = command;
@@ -65,17 +61,15 @@ namespace SocksSharp.Proxy
             // | VN | CD | DSTPORT |      DSTIP        |
             // +----+----+----+----+----+----+----+----+
             //    1    1      2              4
-            byte[] response = new byte[8];
+            var response = new byte[8];
 
             nStream.Read(response, 0, 8);
 
-            byte reply = response[1];
+            var reply = response[1];
 
             // Если запрос не выполнен.
             if (reply != CommandReplyRequestGranted)
-            {
                 HandleCommandError(reply);
-            }
         }
     }
 }

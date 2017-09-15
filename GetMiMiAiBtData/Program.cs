@@ -1,40 +1,25 @@
-﻿using BetterHttpClient;
-using HtmlAgilityPack;
-using SocksSharp;
-using SocksSharp.Proxy;
-using System;
-using System.Collections.Generic;
+﻿using System;
+using System.Diagnostics;
 using System.IO;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+using HtmlAgilityPack;
 
 namespace GetMiMiAiBtData
 {
-
-
-    static class Program
+    internal static class Program
     {
-
         [STAThread]
-        static void Main()
+        private static void Main()
         {
             /*   using (var net = new NetConnect() { TryDirectFirst = true, ConnectWithProxy = true })
                {
                    var Data = net.GetHtml("http://www.mimirrr.com/forumdisplay.php?fid=55&page=1");
                }*/
-            var net = new NetConnect()
+            var net = new NetConnect
             {
                 TryDirectFirst = true,
                 ConnectWithProxy = true
             };
-            var HtmlDoc = new HtmlAgilityPack.HtmlDocument();
+            var HtmlDoc = new HtmlDocument();
             HtmlDoc.LoadHtml(File.OpenText("Web.txt").ReadToEnd());
             var Form = HtmlNode.CreateNode(HtmlDoc.DocumentNode.SelectNodes(
                 "//div[@class='spaceborder']")[2].OuterHtml);
@@ -46,13 +31,13 @@ namespace GetMiMiAiBtData
                 var name = NameAndUrl.InnerText;
                 if (name.Contains("最新BT合集"))
                 {
-                 var PageTemp=   new PageData()
+                    var PageTemp = new PageData
                     {
                         name = NameAndUrl.InnerText,
                         Url = NameAndUrl.Attributes["href"].Value,
                         date = temp.SelectSingleNode("//td[4]//span").InnerText
                     };
-                    var NewHtml = new HtmlAgilityPack.HtmlDocument();
+                    var NewHtml = new HtmlDocument();
                     NewHtml.LoadHtml(File.ReadAllText("Web2.txt"));
                     var Form2 = HtmlNode.CreateNode(NewHtml.DocumentNode.SelectNodes(
                         "//div[@class='t_msgfont']")[0].OuterHtml);
@@ -62,24 +47,24 @@ namespace GetMiMiAiBtData
                         switch (Child.Name)
                         {
                             case "a":
-                                Temp.ReadBt(net,Child.InnerText);
+                                Temp.ReadBt(net, Child.InnerText);
                                 PageTemp.ItemList.Add(Temp);
                                 Temp = new AVData();
-                                continue;
+                                break;
                             case "#text":
                                 Temp.ReadInfo(Child.InnerText);
                                 break;
                             case "br":
-                                Temp.InfoList.Add(new string[] { "br", Child.InnerText });
+                                Temp.InfoList.Add(new[] {"br", Child.InnerText});
                                 break;
                             case "img":
-                                Temp.ReadImg(net,Child.Attributes["src"].Value);
+                                Temp.ReadImg(net, Child.Attributes["src"].Value);
                                 break;
                             default:
+                                Debug.WriteLine($"{Child.InnerText}");
                                 break;
                         }
                     }
-
                 }
             }
             var tr = HtmlNode.CreateNode(HtmlDoc.DocumentNode.SelectNodes("//a[@class='p_pages']")[0].InnerHtml)

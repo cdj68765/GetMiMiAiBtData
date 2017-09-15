@@ -1,6 +1,4 @@
-﻿using SocksSharp;
-using SocksSharp.Proxy;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text;
@@ -8,11 +6,13 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using BetterHttpClient;
+using SocksSharp;
+using SocksSharp.Proxy;
 using HttpClient = System.Net.Http.HttpClient;
 
 namespace GetMiMiAiBtData
 {
-    class HtmlTextHandler : HttpClientHandler
+    internal class HtmlTextHandler : HttpClientHandler
     {
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -40,16 +40,21 @@ namespace GetMiMiAiBtData
 
     public class NetConnect : IDisposable
     {
+        private HttpClient client;
 
         public bool ConnectWithProxy = false;
-        public bool TryDirectFirst = true;
         private bool FirstCheck = true;
-        private HttpClient client;
-        public ProxySettings ProxySettings = new ProxySettings() {Host = "127.0.0.1", Port = 7070};
+        public ProxySettings ProxySettings = new ProxySettings {Host = "127.0.0.1", Port = 7070};
+        public bool TryDirectFirst = true;
 
         public NetConnect()
         {
             client = new HttpClient(new HtmlTextHandler());
+        }
+
+        public void Dispose()
+        {
+            client.Dispose();
         }
 
 
@@ -57,12 +62,11 @@ namespace GetMiMiAiBtData
         {
             HttpResponseMessage GetPost = null;
             if (TryDirectFirst)
-            {
                 try
                 {
                     GetPost = client
                         .PostAsync(Uri.Scheme + Uri.SchemeDelimiter + Uri.Authority + "/load.php",
-                            new FormUrlEncodedContent(new List<KeyValuePair<string, string>>()
+                            new FormUrlEncodedContent(new List<KeyValuePair<string, string>>
                             {
                                 new KeyValuePair<string, string>("ref", Uri.Query.Split('=')[1]),
                                 new KeyValuePair<string, string>("submit ", "点击下载")
@@ -71,14 +75,12 @@ namespace GetMiMiAiBtData
                 catch (Exception)
                 {
                 }
-            }
             if (ConnectWithProxy && GetPost == null)
-            {
                 try
                 {
                     GetPost = new HttpClient(new ProxyClientHandler<Socks5>(ProxySettings))
                         .PostAsync(Uri.Scheme + Uri.SchemeDelimiter + Uri.Authority + "/load.php",
-                            new FormUrlEncodedContent(new List<KeyValuePair<string, string>>()
+                            new FormUrlEncodedContent(new List<KeyValuePair<string, string>>
                             {
                                 new KeyValuePair<string, string>("ref", Uri.Query.Split('=')[1]),
                                 new KeyValuePair<string, string>("submit ", "点击下载")
@@ -87,19 +89,15 @@ namespace GetMiMiAiBtData
                 catch (Exception e)
                 {
                 }
-            }
-            if (GetPost == null)
-            {
-                return new Tuple<HttpResponseMessage, byte[]>(null, null);
-            }
-            return new Tuple<HttpResponseMessage, byte[]>(GetPost, GetPost.Content.ReadAsByteArrayAsync().Result);
+            return GetPost == null
+                ? new Tuple<HttpResponseMessage, byte[]>(null, null)
+                : new Tuple<HttpResponseMessage, byte[]>(GetPost, GetPost.Content.ReadAsByteArrayAsync().Result);
         }
 
-        public Tuple<HttpResponseMessage, byte[]> GetByteDirect(String Uri)
+        public Tuple<HttpResponseMessage, byte[]> GetByteDirect(string Uri)
         {
             HttpResponseMessage GetPost = null;
             if (TryDirectFirst)
-            {
                 try
                 {
                     GetPost = client.GetAsync(Uri).Result;
@@ -107,9 +105,7 @@ namespace GetMiMiAiBtData
                 catch (Exception)
                 {
                 }
-            }
             if (ConnectWithProxy && GetPost == null)
-            {
                 try
                 {
                     GetPost = new HttpClient(new ProxyClientHandler<Socks5>(ProxySettings)).GetAsync(Uri).Result;
@@ -117,19 +113,15 @@ namespace GetMiMiAiBtData
                 catch (Exception)
                 {
                 }
-            }
-            if (GetPost == null)
-            {
-                return new Tuple<HttpResponseMessage, byte[]>(null, null);
-            }
-            return new Tuple<HttpResponseMessage, byte[]>(GetPost, GetPost.Content.ReadAsByteArrayAsync().Result);
+            return GetPost == null
+                ? new Tuple<HttpResponseMessage, byte[]>(null, null)
+                : new Tuple<HttpResponseMessage, byte[]>(GetPost, GetPost.Content.ReadAsByteArrayAsync().Result);
         }
 
-        public string GetHtml(String Url)
+        public string GetHtml(string Url)
         {
-            string RetHtml = "";
+            var RetHtml = "";
             if (TryDirectFirst)
-            {
                 try
                 {
                     RetHtml = client.GetStringAsync(Url).Result;
@@ -138,12 +130,8 @@ namespace GetMiMiAiBtData
                 {
                     TryDirectFirst = false;
                 }
-
-            }
             if (RetHtml != "")
-            {
                 return RetHtml;
-            }
             if (ConnectWithProxy && FirstCheck)
             {
                 try
@@ -157,7 +145,6 @@ namespace GetMiMiAiBtData
                     FirstCheck = false;
                 }
                 if (!FirstCheck)
-                {
                     try
                     {
                         var Web = new BetterHttpClient.HttpClient(
@@ -170,15 +157,9 @@ namespace GetMiMiAiBtData
                     catch (Exception)
                     {
                     }
-                }
             }
 
             return RetHtml;
-        }
-
-        public void Dispose()
-        {
-            client.Dispose();
         }
     }
 }

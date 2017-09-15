@@ -23,15 +23,63 @@ THE SOFTWARE.
 using System;
 using System.IO;
 using System.Net;
-using System.Text;
 using System.Net.Sockets;
-
+using System.Text;
 using SocksSharp.Helpers;
 
 namespace SocksSharp.Proxy
 {
     public class Socks5 : IProxy
     {
+        public IProxySettings Settings { get; set; }
+
+        /// <summary>
+        ///     Create connection to destination host via proxy server.
+        /// </summary>
+        /// <param name="destinationHost">Host</param>
+        /// <param name="destinationPort">Port</param>
+        /// <param name="tcpClient">Connection with proxy server.</param>
+        /// <returns>Connection to destination host</returns>
+        /// <exception cref="System.ArgumentException">
+        ///     Value of <paramref name="destinationHost" /> is <see langword="null" /> or
+        ///     empty.
+        /// </exception>
+        /// <exception cref="System.ArgumentOutOfRangeException">
+        ///     Value of <paramref name="destinationPort" /> less than 1 or
+        ///     greater than 65535.
+        /// </exception>
+        /// <exception cref="ProxyException">Error while working with proxy.</exception>
+        public TcpClient CreateConnection(string destinationHost, int destinationPort, TcpClient client)
+        {
+            if (string.IsNullOrEmpty(destinationHost))
+                throw new ArgumentException(nameof(destinationHost));
+
+            if (!ExceptionHelper.ValidateTcpPort(destinationPort))
+                throw new ArgumentOutOfRangeException(nameof(destinationPort));
+
+            if (client == null && !client.Connected)
+                throw new SocketException();
+
+            try
+            {
+                var nStream = client.GetStream();
+
+                InitialNegotiation(nStream);
+                SendCommand(nStream, CommandConnect, destinationHost, destinationPort);
+            }
+            catch (Exception ex)
+            {
+                client.Close();
+
+                if (ex is IOException || ex is SocketException)
+                    throw new ProxyException("Error while working with proxy", ex);
+
+                throw;
+            }
+
+            return client;
+        }
+
         #region Constants
 
         private const int DefaultPort = 1080;
@@ -64,59 +112,6 @@ namespace SocksSharp.Proxy
 
         #endregion
 
-        public IProxySettings Settings { get; set; }
-
-        public Socks5() { }
-
-        /// <summary>
-        /// Create connection to destination host via proxy server.
-        /// </summary>
-        /// <param name="destinationHost">Host</param>
-        /// <param name="destinationPort">Port</param>
-        /// <param name="tcpClient">Connection with proxy server.</param>
-        /// <returns>Connection to destination host</returns>
-        /// <exception cref="System.ArgumentException">Value of <paramref name="destinationHost"/> is <see langword="null"/> or empty.</exception>
-        /// <exception cref="System.ArgumentOutOfRangeException">Value of <paramref name="destinationPort"/> less than 1 or greater than 65535.</exception>
-        /// <exception cref="ProxyException">Error while working with proxy.</exception>
-        public TcpClient CreateConnection(string destinationHost, int destinationPort, TcpClient client)
-        {
-            if (String.IsNullOrEmpty(destinationHost))
-            {
-                throw new ArgumentException(nameof(destinationHost));
-            }
-
-            if (!ExceptionHelper.ValidateTcpPort(destinationPort))
-            {
-                throw new ArgumentOutOfRangeException(nameof(destinationPort));
-            }
-
-            if (client == null && !client.Connected)
-            {
-                throw new SocketException();
-            }
-
-            try
-            {
-                NetworkStream nStream = client.GetStream();
-
-                InitialNegotiation(nStream);
-                SendCommand(nStream, CommandConnect, destinationHost, destinationPort);
-            }
-            catch (Exception ex)
-            {
-                client.Close();
-
-                if (ex is IOException || ex is SocketException)
-                {
-                    throw new ProxyException("Error while working with proxy", ex);
-                }
-
-                throw;
-            }
-
-            return client;
-        }
-
         #region Methods (private)
 
         private void InitialNegotiation(NetworkStream nStream)
@@ -124,20 +119,16 @@ namespace SocksSharp.Proxy
             byte authMethod;
 
             if (Settings.Credentials != null)
-            {
                 authMethod = AuthMethodUsernamePassword;
-            }
             else
-            {
                 authMethod = AuthMethodNoAuthenticationRequired;
-            }
 
             // +----+----------+----------+
             // |VER | NMETHODS | METHODS  |
             // +----+----------+----------+
             // | 1  |    1     | 1 to 255 |
             // +----+----------+----------+
-            byte[] request = new byte[3];
+            var request = new byte[3];
 
             request[0] = VersionNumber;
             request[1] = 1;
@@ -150,29 +141,25 @@ namespace SocksSharp.Proxy
             // +----+--------+
             // | 1  |   1    |
             // +----+--------+
-            byte[] response = new byte[2];
+            var response = new byte[2];
 
             nStream.Read(response, 0, response.Length);
 
-            byte reply = response[1];
+            var reply = response[1];
 
             if (authMethod == AuthMethodUsernamePassword && reply == AuthMethodUsernamePassword)
-            {
                 SendUsernameAndPassword(nStream);
-            }
             else if (reply != CommandReplySucceeded)
-            {
                 HandleCommandError(reply);
-            }
         }
 
         private void SendUsernameAndPassword(NetworkStream nStream)
         {
-            byte[] uname = String.IsNullOrEmpty(Settings.Credentials.UserName)
+            var uname = string.IsNullOrEmpty(Settings.Credentials.UserName)
                 ? new byte[0]
                 : Encoding.ASCII.GetBytes(Settings.Credentials.UserName);
 
-            byte[] passwd = String.IsNullOrEmpty(Settings.Credentials.Password)
+            var passwd = string.IsNullOrEmpty(Settings.Credentials.Password)
                 ? new byte[0]
                 : Encoding.ASCII.GetBytes(Settings.Credentials.Password);
 
@@ -181,12 +168,12 @@ namespace SocksSharp.Proxy
             // +----+------+----------+------+----------+
             // | 1  |  1   | 1 to 255 |  1   | 1 to 255 |
             // +----+------+----------+------+----------+
-            byte[] request = new byte[uname.Length + passwd.Length + 3];
+            var request = new byte[uname.Length + passwd.Length + 3];
 
             request[0] = 1;
-            request[1] = (byte)uname.Length;
+            request[1] = (byte) uname.Length;
             uname.CopyTo(request, 2);
-            request[2 + uname.Length] = (byte)passwd.Length;
+            request[2 + uname.Length] = (byte) passwd.Length;
             passwd.CopyTo(request, 3 + uname.Length);
 
             nStream.Write(request, 0, request.Length);
@@ -196,30 +183,28 @@ namespace SocksSharp.Proxy
             // +----+--------+
             // | 1  |   1    |
             // +----+--------+
-            byte[] response = new byte[2];
+            var response = new byte[2];
 
             nStream.Read(response, 0, response.Length);
 
-            byte reply = response[1];
+            var reply = response[1];
 
             if (reply != CommandReplySucceeded)
-            {
                 throw new ProxyException("Unable to authenticate proxy-server");
-            }
         }
 
         private void SendCommand(NetworkStream nStream, byte command, string destinationHost, int destinationPort)
         {
-            byte aTyp = GetAddressType(destinationHost);
-            byte[] dstAddr = GetAddressBytes(aTyp, destinationHost);
-            byte[] dstPort = GetPortBytes(destinationPort);
+            var aTyp = GetAddressType(destinationHost);
+            var dstAddr = GetAddressBytes(aTyp, destinationHost);
+            var dstPort = GetPortBytes(destinationPort);
 
             // +----+-----+-------+------+----------+----------+
             // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
             // +----+-----+-------+------+----------+----------+
             // | 1  |  1  | X'00' |  1   | Variable |    2     |
             // +----+-----+-------+------+----------+----------+
-            byte[] request = new byte[4 + dstAddr.Length + 2];
+            var request = new byte[4 + dstAddr.Length + 2];
 
             request[0] = VersionNumber;
             request[1] = command;
@@ -235,15 +220,13 @@ namespace SocksSharp.Proxy
             // +----+-----+-------+------+----------+----------+
             // | 1  |  1  | X'00' |  1   | Variable |    2     |
             // +----+-----+-------+------+----------+----------+
-            byte[] response = new byte[255];
+            var response = new byte[255];
 
             nStream.Read(response, 0, response.Length);
 
-            byte reply = response[1];
+            var reply = response[1];
             if (reply != CommandReplySucceeded)
-            {
                 HandleCommandError(reply);
-            }
         }
 
         private byte GetAddressType(string host)
@@ -251,9 +234,7 @@ namespace SocksSharp.Proxy
             IPAddress ipAddr = null;
 
             if (!IPAddress.TryParse(host, out ipAddr))
-            {
                 return AddressTypeDomainName;
-            }
 
             switch (ipAddr.AddressFamily)
             {
@@ -265,10 +246,9 @@ namespace SocksSharp.Proxy
 
                 default:
                     return 0;
-                    throw new ProxyException(String.Format("Not supported address type",
+                    throw new ProxyException(string.Format("Not supported address type",
                         host, Enum.GetName(typeof(AddressFamily), ipAddr.AddressFamily), ToString()));
             }
-
         }
 
         private byte[] GetAddressBytes(byte addressType, string host)
@@ -280,9 +260,9 @@ namespace SocksSharp.Proxy
                     return IPAddress.Parse(host).GetAddressBytes();
 
                 case AddressTypeDomainName:
-                    byte[] bytes = new byte[host.Length + 1];
+                    var bytes = new byte[host.Length + 1];
 
-                    bytes[0] = (byte)host.Length;
+                    bytes[0] = (byte) host.Length;
                     Encoding.ASCII.GetBytes(host).CopyTo(bytes, 1);
 
                     return bytes;
@@ -294,10 +274,10 @@ namespace SocksSharp.Proxy
 
         private byte[] GetPortBytes(int port)
         {
-            byte[] array = new byte[2];
+            var array = new byte[2];
 
-            array[0] = (byte)(port / 256);
-            array[1] = (byte)(port % 256);
+            array[0] = (byte) (port / 256);
+            array[1] = (byte) (port % 256);
 
             return array;
         }

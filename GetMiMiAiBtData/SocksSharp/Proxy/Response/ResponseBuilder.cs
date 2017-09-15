@@ -21,17 +21,15 @@ THE SOFTWARE.
  */
 
 using System;
-using System.IO;
-using System.Web;
-using System.Net;
-using System.Text;
-using System.Net.Http;
-using System.Threading;
-using System.Net.Sockets;
-using System.IO.Compression;
-using System.Threading.Tasks;
 using System.Collections.Generic;
-
+using System.IO;
+using System.IO.Compression;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using SocksSharp.Extensions;
 using SocksSharp.Helpers;
 
@@ -39,188 +37,26 @@ namespace SocksSharp.Proxy.Response
 {
     internal class ResponseBuilder : IResponseBuilder
     {
-        private sealed class BytesWraper
-        {
-            public int Length { get; set; }
-
-            public byte[] Value { get; set; }
-        }
-
-        private sealed class ZipWraperStream : Stream
-        {
-            #region Поля (закрытые)
-
-            private Stream _baseStream;
-            private ReceiveHelper _receiverHelper;
-
-            #endregion
-
-
-            #region Свойства (открытые)
-
-            public int BytesRead { get; private set; }
-
-            public int TotalBytesRead { get; set; }
-
-            public int LimitBytesRead { get; set; }
-
-            #region Переопределённые
-
-            public override bool CanRead
-            {
-                get
-                {
-                    return _baseStream.CanRead;
-                }
-            }
-
-            public override bool CanSeek
-            {
-                get
-                {
-                    return _baseStream.CanSeek;
-                }
-            }
-
-            public override bool CanTimeout
-            {
-                get
-                {
-                    return _baseStream.CanTimeout;
-                }
-            }
-
-            public override bool CanWrite
-            {
-                get
-                {
-                    return _baseStream.CanWrite;
-                }
-            }
-
-            public override long Length
-            {
-                get
-                {
-                    return _baseStream.Length;
-                }
-            }
-
-            public override long Position
-            {
-                get
-                {
-                    return _baseStream.Position;
-                }
-                set
-                {
-                    _baseStream.Position = value;
-                }
-            }
-
-            #endregion
-
-            #endregion
-
-
-            public ZipWraperStream(Stream baseStream, ReceiveHelper receiverHelper)
-            {
-                _baseStream = baseStream;
-                _receiverHelper = receiverHelper;
-            }
-
-
-            #region Методы (открытые)
-
-            public override void Flush()
-            {
-                _baseStream.Flush();
-            }
-
-            public override void SetLength(long value)
-            {
-                _baseStream.SetLength(value);
-            }
-
-            public override long Seek(long offset, SeekOrigin origin)
-            {
-                return _baseStream.Seek(offset, origin);
-            }
-
-            public override int Read(byte[] buffer, int offset, int count)
-            {
-                // Если установлен лимит на количество считанных байт.
-                if (LimitBytesRead != 0)
-                {
-                    int length = LimitBytesRead - TotalBytesRead;
-
-                    // Если лимит достигнут.
-                    if (length == 0)
-                    {
-                        return 0;
-                    }
-
-                    if (length > buffer.Length)
-                    {
-                        length = buffer.Length;
-                    }
-
-                    if (_receiverHelper.HasData)
-                    {
-                        BytesRead = _receiverHelper.Read(buffer, offset, length);
-                    }
-                    else
-                    {
-                        BytesRead = _baseStream.Read(buffer, offset, length);
-                    }
-                }
-                else
-                {
-                    if (_receiverHelper.HasData)
-                    {
-                        BytesRead = _receiverHelper.Read(buffer, offset, count);
-                    }
-                    else
-                    {
-                        BytesRead = _baseStream.Read(buffer, offset, count);
-                    }
-                }
-
-                TotalBytesRead += BytesRead;
-
-                return BytesRead;
-            }
-
-            public override void Write(byte[] buffer, int offset, int count)
-            {
-                _baseStream.Write(buffer, offset, count);
-            }
-
-            #endregion
-        }
-
         private static readonly byte[] openHtmlSignature = Encoding.ASCII.GetBytes("<html");
         private static readonly byte[] closeHtmlSignature = Encoding.ASCII.GetBytes("</html>");
+        private readonly int bufferSize;
 
         private readonly string newLine = "\r\n";
-        private readonly int bufferSize;
+
+        private CancellationToken cancellationToken;
+        private Stream commonStream;
+        private Dictionary<string, List<string>> contentHeaders;
 
         private int contentLength;
 
+        private readonly CookieContainer cookies;
+
         private NetworkStream networkStream;
-        private Stream commonStream;
+
+        private readonly ReceiveHelper receiveHelper;
 
         private HttpResponseMessage response;
-        private Dictionary<string, List<string>> contentHeaders;
-
-        private CookieContainer cookies;
-        private Uri uri;
-
-        private ReceiveHelper receiveHelper;
-
-        private CancellationToken cancellationToken;
-
-        public int ReceiveTimeout { get; set; }
+        private readonly Uri uri;
 
         public ResponseBuilder(int bufferSize, CookieContainer cookies = null, Uri uri = null)
         {
@@ -233,15 +69,18 @@ namespace SocksSharp.Proxy.Response
             receiveHelper = new ReceiveHelper(bufferSize);
         }
 
+        public int ReceiveTimeout { get; set; }
+
         public Task<HttpResponseMessage> GetResponseAsync(HttpRequestMessage request, Stream stream)
         {
             return GetResponseAsync(request, stream, CancellationToken.None);
         }
 
-        public Task<HttpResponseMessage> GetResponseAsync(HttpRequestMessage request, Stream stream, CancellationToken cancellationToken)
+        public Task<HttpResponseMessage> GetResponseAsync(HttpRequestMessage request, Stream stream,
+            CancellationToken cancellationToken)
         {
-            this.networkStream = stream as NetworkStream;
-            this.commonStream = stream;
+            networkStream = stream as NetworkStream;
+            commonStream = stream;
 
             this.cancellationToken = cancellationToken;
 
@@ -286,40 +125,35 @@ namespace SocksSharp.Proxy.Response
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            string version = startingLine.Substring("HTTP/", " ");
-            string statusCode = startingLine.Substring(" ", " ");
+            var version = startingLine.Substring("HTTP/", " ");
+            var statusCode = startingLine.Substring(" ", " ");
             if (statusCode.Length == 0)
-            {
-                // Если сервер не возвращает Reason Phrase
                 statusCode = startingLine.Substring(" ", newLine);
-            }
             if (version.Length == 0 || statusCode.Length == 0)
-            {
                 throw new ProxyException("Received empty response");
-            }
 
             response.Version = Version.Parse(version);
-            response.StatusCode = (HttpStatusCode)Enum.Parse(typeof(HttpStatusCode), statusCode);
+            response.StatusCode = (HttpStatusCode) Enum.Parse(typeof(HttpStatusCode), statusCode);
         }
 
         private void ReceiveHeaders()
         {
             while (true)
             {
-                string header = receiveHelper.ReadLine();
+                var header = receiveHelper.ReadLine();
 
                 if (header == newLine)
                     return;
 
-                int separatorPos = header.IndexOf(':');
+                var separatorPos = header.IndexOf(':');
                 if (separatorPos == -1)
                 {
                     //string message = string.Format(
                     //Resources.HttpException_WrongHeader, header, Address.Host);
                     //throw NewHttpException(message);
                 }
-                string headerName = header.Substring(0, separatorPos);
-                string headerValue = header.Substring(separatorPos + 1).Trim(' ', '\t', '\r', '\n');
+                var headerName = header.Substring(0, separatorPos);
+                var headerValue = header.Substring(separatorPos + 1).Trim(' ', '\t', '\r', '\n');
 
                 if (cookies != null && headerName.Equals("Set-Cookie", StringComparison.OrdinalIgnoreCase))
                 {
@@ -358,11 +192,11 @@ namespace SocksSharp.Proxy.Response
 
 
                 var memoryStream = new MemoryStream(
-                    (contentLength == -1) ? 0 : contentLength);
+                    contentLength == -1 ? 0 : contentLength);
 
                 try
                 {
-                    IEnumerable<BytesWraper> source = GetMessageBodySource();
+                    var source = GetMessageBodySource();
                     foreach (var bytes in source)
                     {
                         memoryStream.Write(bytes.Value, 0, bytes.Length);
@@ -375,39 +209,31 @@ namespace SocksSharp.Proxy.Response
                     {
                         //throw NewHttpException(Resources.HttpException_FailedReceiveMessageBody, ex);
                     }
-
-                  
                 }
 
                 memoryStream.Seek(0, SeekOrigin.Begin);
                 response.Content = new StreamContent(memoryStream);
                 foreach (var pair in contentHeaders)
-                {
                     response.Content.Headers.TryAddWithoutValidation(pair.Key, pair.Value);
-                }
             }
         }
 
         private void SetCookie(string value)
         {
             if (value.Length == 0)
-            {
                 return;
-            }
 
             // Ищем позицию, где заканчивается куки и начинается описание его параметров.
-            int endCookiePos = value.IndexOf(';');
+            var endCookiePos = value.IndexOf(';');
 
             // Ищем позицию между именем и значением куки.
-            int separatorPos = value.IndexOf('=');
+            var separatorPos = value.IndexOf('=');
 
             if (separatorPos == -1)
-            {
                 throw new Exception("Invalid cookie");
-            }
 
             string cookieValue;
-            string cookieName = value.Substring(0, separatorPos);
+            var cookieName = value.Substring(0, separatorPos);
 
             if (endCookiePos == -1)
             {
@@ -416,27 +242,23 @@ namespace SocksSharp.Proxy.Response
             else
             {
                 cookieValue = value.Substring(separatorPos + 1,
-                    (endCookiePos - separatorPos) - 1);
+                    endCookiePos - separatorPos - 1);
 
                 #region Get cookie expires time
 
-                int expiresPos = value.IndexOf("expires=");
+                var expiresPos = value.IndexOf("expires=");
 
                 if (expiresPos != -1)
                 {
                     string expiresStr;
-                    int endExpiresPos = value.IndexOf(';', expiresPos);
+                    var endExpiresPos = value.IndexOf(';', expiresPos);
 
                     expiresPos += 8;
 
                     if (endExpiresPos == -1)
-                    {
                         expiresStr = value.Substring(expiresPos);
-                    }
                     else
-                    {
                         expiresStr = value.Substring(expiresPos, endExpiresPos - expiresPos);
-                    }
 
                     DateTime expires;
 
@@ -468,9 +290,7 @@ namespace SocksSharp.Proxy.Response
         private IEnumerable<BytesWraper> GetMessageBodySource()
         {
             if (contentHeaders.ContainsKey("Content-Encoding"))
-            {
                 return GetMessageBodySourceZip();
-            }
 
             return GetMessageBodySourceStd();
         }
@@ -479,14 +299,10 @@ namespace SocksSharp.Proxy.Response
         private IEnumerable<BytesWraper> GetMessageBodySourceZip()
         {
             if (contentHeaders.ContainsKey("Transfer-Encoding"))
-            {
                 return ReceiveMessageBodyChunkedZip();
-            }
 
             if (contentLength != -1)
-            {
                 return ReceiveMessageBodyZip(contentLength);
-            }
 
             var streamWrapper = new ZipWraperStream(commonStream, receiveHelper);
 
@@ -497,13 +313,9 @@ namespace SocksSharp.Proxy.Response
         private IEnumerable<BytesWraper> GetMessageBodySourceStd()
         {
             if (contentHeaders.ContainsKey("Transfer-Encoding"))
-            {
                 return ReceiveMessageBodyChunked();
-            }
             if (contentLength != -1)
-            {
                 return ReceiveMessageBody(contentLength);
-            }
 
             return ReceiveMessageBody(commonStream);
         }
@@ -514,12 +326,8 @@ namespace SocksSharp.Proxy.Response
             int length;
 
             if (contentHeaders.TryGetValue("Content-Length", out values))
-            {
-                if (Int32.TryParse(values[0], out length))
-                {
+                if (int.TryParse(values[0], out length))
                     return length;
-                }
-            }
 
             return -1;
         }
@@ -527,33 +335,139 @@ namespace SocksSharp.Proxy.Response
         private string GetContentEncoding()
         {
             List<string> values;
-            string encoding = "";
+            var encoding = "";
 
             if (contentHeaders.TryGetValue("Content-Encoding", out values))
-            {
                 encoding = values[0];
-            }
 
             return encoding;
         }
 
         private void WaitData()
         {
-            int sleepTime = 0;
-            int delay = (ReceiveTimeout < 10) ?
-                10 : ReceiveTimeout;
+            var sleepTime = 0;
+            var delay = ReceiveTimeout < 10 ? 10 : ReceiveTimeout;
 
             var dataAvailable = networkStream?.DataAvailable;
             while (dataAvailable.HasValue && !dataAvailable.Value)
             {
                 if (sleepTime >= delay)
-                {
                     throw new ProxyException("Wait data timeout");
-                }
 
                 sleepTime += 10;
                 Thread.Sleep(10);
             }
+        }
+
+        private sealed class BytesWraper
+        {
+            public int Length { get; set; }
+
+            public byte[] Value { get; set; }
+        }
+
+        private sealed class ZipWraperStream : Stream
+        {
+            public ZipWraperStream(Stream baseStream, ReceiveHelper receiverHelper)
+            {
+                _baseStream = baseStream;
+                _receiverHelper = receiverHelper;
+            }
+
+            #region Поля (закрытые)
+
+            private readonly Stream _baseStream;
+            private readonly ReceiveHelper _receiverHelper;
+
+            #endregion
+
+
+            #region Свойства (открытые)
+
+            public int BytesRead { get; private set; }
+
+            public int TotalBytesRead { get; set; }
+
+            public int LimitBytesRead { get; set; }
+
+            #region Переопределённые
+
+            public override bool CanRead => _baseStream.CanRead;
+
+            public override bool CanSeek => _baseStream.CanSeek;
+
+            public override bool CanTimeout => _baseStream.CanTimeout;
+
+            public override bool CanWrite => _baseStream.CanWrite;
+
+            public override long Length => _baseStream.Length;
+
+            public override long Position
+            {
+                get => _baseStream.Position;
+                set => _baseStream.Position = value;
+            }
+
+            #endregion
+
+            #endregion
+
+
+            #region Методы (открытые)
+
+            public override void Flush()
+            {
+                _baseStream.Flush();
+            }
+
+            public override void SetLength(long value)
+            {
+                _baseStream.SetLength(value);
+            }
+
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                return _baseStream.Seek(offset, origin);
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                // Если установлен лимит на количество считанных байт.
+                if (LimitBytesRead != 0)
+                {
+                    var length = LimitBytesRead - TotalBytesRead;
+
+                    // Если лимит достигнут.
+                    if (length == 0)
+                        return 0;
+
+                    if (length > buffer.Length)
+                        length = buffer.Length;
+
+                    if (_receiverHelper.HasData)
+                        BytesRead = _receiverHelper.Read(buffer, offset, length);
+                    else
+                        BytesRead = _baseStream.Read(buffer, offset, length);
+                }
+                else
+                {
+                    if (_receiverHelper.HasData)
+                        BytesRead = _receiverHelper.Read(buffer, offset, count);
+                    else
+                        BytesRead = _baseStream.Read(buffer, offset, count);
+                }
+
+                TotalBytesRead += BytesRead;
+
+                return BytesRead;
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                _baseStream.Write(buffer, offset, count);
+            }
+
+            #endregion
         }
 
         #region Receive Content (F*cking trash, but works (not sure (really)))
@@ -562,9 +476,9 @@ namespace SocksSharp.Proxy.Response
         private IEnumerable<BytesWraper> ReceiveMessageBody(Stream stream)
         {
             var bytesWraper = new BytesWraper();
-            byte[] buffer = new byte[this.bufferSize];
+            var buffer = new byte[bufferSize];
             bytesWraper.Value = buffer;
-            int begBytesRead = 0;
+            var begBytesRead = 0;
 
             // Считываем начальные данные из тела сообщения.
             if (stream is GZipStream || stream is DeflateStream)
@@ -574,32 +488,26 @@ namespace SocksSharp.Proxy.Response
             else
             {
                 if (receiveHelper.HasData)
-                {
                     begBytesRead = receiveHelper.Read(buffer, 0, bufferSize);
-                }
                 if (begBytesRead < bufferSize)
-                {
                     begBytesRead += stream.Read(buffer, begBytesRead, bufferSize - begBytesRead);
-                }
             }
             // Возвращаем начальные данные.
             bytesWraper.Length = begBytesRead;
             yield return bytesWraper;
             // Проверяем, есть ли открывающий тег '<html'.
             // Если есть, то считываем данные то тех пор, пока не встретим закрывающий тек '</html>'.
-            bool isHtml = FindSignature(buffer, begBytesRead, openHtmlSignature);
+            var isHtml = FindSignature(buffer, begBytesRead, openHtmlSignature);
             if (isHtml)
             {
-                bool found = FindSignature(buffer, begBytesRead, closeHtmlSignature);
+                var found = FindSignature(buffer, begBytesRead, closeHtmlSignature);
                 // Проверяем, есть ли в начальных данных закрывающий тег.
                 if (found)
-                {
                     yield break;
-                }
             }
             while (true)
             {
-                int bytesRead = stream.Read(buffer, 0, bufferSize);
+                var bytesRead = stream.Read(buffer, 0, bufferSize);
                 // Если тело сообщения представляет HTML.
                 if (isHtml)
                 {
@@ -608,7 +516,7 @@ namespace SocksSharp.Proxy.Response
                         WaitData();
                         continue;
                     }
-                    bool found = FindSignature(buffer, bytesRead, closeHtmlSignature);
+                    var found = FindSignature(buffer, bytesRead, closeHtmlSignature);
                     if (found)
                     {
                         bytesWraper.Length = bytesRead;
@@ -630,21 +538,17 @@ namespace SocksSharp.Proxy.Response
         {
             //Stream stream = _request.ClientStream;
             var bytesWraper = new BytesWraper();
-            byte[] buffer = new byte[bufferSize];
+            var buffer = new byte[bufferSize];
             bytesWraper.Value = buffer;
 
-            int totalBytesRead = 0;
+            var totalBytesRead = 0;
             while (totalBytesRead != contentLength)
             {
                 int bytesRead;
                 if (receiveHelper.HasData)
-                {
                     bytesRead = receiveHelper.Read(buffer, 0, bufferSize);
-                }
                 else
-                {
                     bytesRead = commonStream.Read(buffer, 0, bufferSize);
-                }
                 if (bytesRead == 0)
                 {
                     WaitData();
@@ -663,11 +567,11 @@ namespace SocksSharp.Proxy.Response
         {
             //Stream stream = _request.ClientStream;
             var bytesWraper = new BytesWraper();
-            byte[] buffer = new byte[this.bufferSize];
+            var buffer = new byte[bufferSize];
             bytesWraper.Value = buffer;
             while (true)
             {
-                string line = receiveHelper.ReadLine();
+                var line = receiveHelper.ReadLine();
                 // Если достигнут конец блока.
                 if (line == newLine)
                     continue;
@@ -676,8 +580,10 @@ namespace SocksSharp.Proxy.Response
                 if (line == string.Empty)
                     yield break;
                 int blockLength;
-                int totalBytesRead = 0;
+                var totalBytesRead = 0;
+
                 #region Задаём длину блока
+
                 try
                 {
                     blockLength = Convert.ToInt32(line, 16);
@@ -691,26 +597,22 @@ namespace SocksSharp.Proxy.Response
                     }
                     throw;
                 }
+
                 #endregion
+
                 // Если достигнут конец тела сообщения.
                 if (blockLength == 0)
                     yield break;
                 while (totalBytesRead != blockLength)
                 {
-                    int length = blockLength - totalBytesRead;
+                    var length = blockLength - totalBytesRead;
                     if (length > bufferSize)
-                    {
                         length = bufferSize;
-                    }
                     int bytesRead;
                     if (receiveHelper.HasData)
-                    {
                         bytesRead = receiveHelper.Read(buffer, 0, length);
-                    }
                     else
-                    {
                         bytesRead = commonStream.Read(buffer, 0, length);
-                    }
                     if (bytesRead == 0)
                     {
                         WaitData();
@@ -729,16 +631,15 @@ namespace SocksSharp.Proxy.Response
         {
             var bytesWraper = new BytesWraper();
             var streamWrapper = new ZipWraperStream(commonStream, receiveHelper);
-            using (Stream stream = GetZipStream(streamWrapper))
+            using (var stream = GetZipStream(streamWrapper))
             {
-                byte[] buffer = new byte[bufferSize];
+                var buffer = new byte[bufferSize];
                 bytesWraper.Value = buffer;
 
                 while (true)
                 {
-                    int bytesRead = stream.Read(buffer, 0, bufferSize);
+                    var bytesRead = stream.Read(buffer, 0, bufferSize);
                     if (bytesRead == 0)
-                    {
                         if (streamWrapper.TotalBytesRead == contentLength)
                         {
                             yield break;
@@ -748,7 +649,6 @@ namespace SocksSharp.Proxy.Response
                             WaitData();
                             continue;
                         }
-                    }
                     bytesWraper.Length = bytesRead;
                     yield return bytesWraper;
                 }
@@ -760,13 +660,13 @@ namespace SocksSharp.Proxy.Response
             var bytesWraper = new BytesWraper();
             var streamWrapper = new ZipWraperStream(commonStream, receiveHelper);
 
-            using (Stream stream = GetZipStream(streamWrapper))
+            using (var stream = GetZipStream(streamWrapper))
             {
-                byte[] buffer = new byte[bufferSize];
+                var buffer = new byte[bufferSize];
                 bytesWraper.Value = buffer;
                 while (true)
                 {
-                    string line = receiveHelper.ReadLine();
+                    var line = receiveHelper.ReadLine();
                     // Если достигнут конец блока.
                     if (line == newLine)
                         continue;
@@ -775,7 +675,9 @@ namespace SocksSharp.Proxy.Response
                     if (line == string.Empty)
                         yield break;
                     int blockLength;
+
                     #region Задаём длину блока
+
                     try
                     {
                         blockLength = Convert.ToInt32(line, 16);
@@ -789,7 +691,9 @@ namespace SocksSharp.Proxy.Response
                         }
                         throw;
                     }
+
                     #endregion
+
                     // Если достигнут конец тела сообщения.
                     if (blockLength == 0)
                         yield break;
@@ -797,9 +701,8 @@ namespace SocksSharp.Proxy.Response
                     streamWrapper.LimitBytesRead = blockLength;
                     while (true)
                     {
-                        int bytesRead = stream.Read(buffer, 0, bufferSize);
+                        var bytesRead = stream.Read(buffer, 0, bufferSize);
                         if (bytesRead == 0)
-                        {
                             if (streamWrapper.TotalBytesRead == blockLength)
                             {
                                 break;
@@ -809,7 +712,6 @@ namespace SocksSharp.Proxy.Response
                                 WaitData();
                                 continue;
                             }
-                        }
                         bytesWraper.Length = bytesRead;
                         yield return bytesWraper;
                     }
@@ -819,7 +721,7 @@ namespace SocksSharp.Proxy.Response
 
         private Stream GetZipStream(Stream stream)
         {
-            string contentEncoding = GetContentEncoding().ToLower();
+            var contentEncoding = GetContentEncoding().ToLower();
 
             switch (contentEncoding)
             {
@@ -834,27 +736,19 @@ namespace SocksSharp.Proxy.Response
 
         private bool FindSignature(byte[] source, int sourceLength, byte[] signature)
         {
-            int length = (sourceLength - signature.Length) + 1;
-            for (int sourceIndex = 0; sourceIndex < length; ++sourceIndex)
+            var length = sourceLength - signature.Length + 1;
+            for (var sourceIndex = 0; sourceIndex < length; ++sourceIndex)
+            for (var signatureIndex = 0; signatureIndex < signature.Length; ++signatureIndex)
             {
-                for (int signatureIndex = 0; signatureIndex < signature.Length; ++signatureIndex)
-                {
-                    byte sourceByte = source[signatureIndex + sourceIndex];
-                    char sourceChar = (char)sourceByte;
-                    if (char.IsLetter(sourceChar))
-                    {
-                        sourceChar = char.ToLower(sourceChar);
-                    }
-                    sourceByte = (byte)sourceChar;
-                    if (sourceByte != signature[signatureIndex])
-                    {
-                        break;
-                    }
-                    else if (signatureIndex == (signature.Length - 1))
-                    {
-                        return true;
-                    }
-                }
+                var sourceByte = source[signatureIndex + sourceIndex];
+                var sourceChar = (char) sourceByte;
+                if (char.IsLetter(sourceChar))
+                    sourceChar = char.ToLower(sourceChar);
+                sourceByte = (byte) sourceChar;
+                if (sourceByte != signature[signatureIndex])
+                    break;
+                if (signatureIndex == signature.Length - 1)
+                    return true;
             }
             return false;
         }

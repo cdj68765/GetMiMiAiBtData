@@ -1,44 +1,43 @@
 ﻿using System;
-using System.Net;
+using System.Net.Sockets;
 using System.Security;
 using System.Threading;
-using System.Net.Sockets;
 
 namespace SocksSharp.Proxy
 {
     /// <summary>
-    /// Represents Proxy Client to <see cref="ProxyClientHandler{T}"/>
+    ///     Represents Proxy Client to <see cref="ProxyClientHandler{T}" />
     /// </summary>
     /// <typeparam name="T"></typeparam>
     public class ProxyClient<T> : IProxyClient<T> where T : IProxy
     {
-        private T client;
-        
+        private readonly T client;
+
         /// <summary>
-        /// Gets or sets proxy settings for client
-        /// </summary>
-        public ProxySettings Settings { get; set; }
-                     
-        /// <summary>
-        /// Initialize a new instance of the <see cref="ProxyClient{T}"/> with <see cref="IProxy"/> proxy handler
+        ///     Initialize a new instance of the <see cref="ProxyClient{T}" /> with <see cref="IProxy" /> proxy handler
         /// </summary>
         public ProxyClient()
         {
-            this.client = (T) Activator.CreateInstance(typeof(T));
+            client = (T) Activator.CreateInstance(typeof(T));
         }
 
         /// <summary>
-        /// Create connection via proxy to destination host
+        ///     Gets or sets proxy settings for client
         /// </summary>
-        /// <returns>Destination <see cref="NetworkStream"/></returns>
+        public ProxySettings Settings { get; set; }
+
+        /// <summary>
+        ///     Create connection via proxy to destination host
+        /// </summary>
+        /// <returns>Destination <see cref="NetworkStream" /></returns>
         /// <exception cref="System.InvalidOperationException">
-        /// Value of <see cref="Host"/> equals <see langword="null"/> or empty.
-        /// -or-
-        /// Value of <see cref="Port"/> less than 1 or greater than 65535.
-        /// -or-
-        /// Value of <see cref="UserName"/> length greater than 255.
-        /// -or-
-        /// Value of <see cref="Password"/> length greater than 255.
+        ///     Value of <see cref="Host" /> equals <see langword="null" /> or empty.
+        ///     -or-
+        ///     Value of <see cref="Port" /> less than 1 or greater than 65535.
+        ///     -or-
+        ///     Value of <see cref="UserName" /> length greater than 255.
+        ///     -or-
+        ///     Value of <see cref="Password" /> length greater than 255.
         /// </exception>
         public NetworkStream GetDestinationStream(string destinationHost, int destinationPort)
         {
@@ -53,8 +52,7 @@ namespace SocksSharp.Proxy
 
             try
             {
-                tcpClient.BeginConnect(Settings.Host, Settings.Port, new AsyncCallback(
-                    (ar) =>
+                tcpClient.BeginConnect(Settings.Host, Settings.Port, ar =>
                     {
                         if (tcpClient.Client != null)
                         {
@@ -69,7 +67,7 @@ namespace SocksSharp.Proxy
 
                             connectDoneEvent.Set();
                         }
-                    }), tcpClient
+                    }, tcpClient
                 );
             }
             catch (Exception ex)
@@ -77,9 +75,7 @@ namespace SocksSharp.Proxy
                 tcpClient.Close();
 
                 if (ex is SocketException || ex is SecurityException)
-                {
                     throw new ProxyException("Failed to connect to proxy-server", ex);
-                }
 
                 throw;
             }
@@ -95,13 +91,8 @@ namespace SocksSharp.Proxy
                 tcpClient.Close();
 
                 if (connectException is SocketException)
-                {
                     throw new ProxyException("Failed to connect to proxy-server", connectException);
-                }
-                else
-                {
-                    throw connectException;
-                }
+                throw connectException;
             }
 
             if (!tcpClient.Connected)
@@ -114,7 +105,7 @@ namespace SocksSharp.Proxy
 
             tcpClient.SendTimeout = Settings.ReadWriteTimeOut;
             tcpClient.ReceiveTimeout = Settings.ReadWriteTimeOut;
-            
+
             var connectedTcpClient = client.CreateConnection(
                 destinationHost,
                 destinationPort,
@@ -122,6 +113,5 @@ namespace SocksSharp.Proxy
 
             return connectedTcpClient.GetStream();
         }
-                        
     }
 }

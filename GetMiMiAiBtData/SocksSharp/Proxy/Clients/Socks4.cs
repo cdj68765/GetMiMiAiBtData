@@ -23,59 +23,42 @@ THE SOFTWARE.
 using System;
 using System.IO;
 using System.Net;
-using System.Text;
 using System.Net.Sockets;
-
+using System.Text;
 using SocksSharp.Helpers;
 
 namespace SocksSharp.Proxy
 {
     public class Socks4 : IProxy
     {
-        #region Constants (protected)
-
-        internal protected const int DefaultPort = 1080;
-
-        internal protected const byte VersionNumber = 4;
-        internal protected const byte CommandConnect = 0x01;
-        internal protected const byte CommandBind = 0x02;
-        internal protected const byte CommandReplyRequestGranted = 0x5a;
-        internal protected const byte CommandReplyRequestRejectedOrFailed = 0x5b;
-        internal protected const byte CommandReplyRequestRejectedCannotConnectToIdentd = 0x5c;
-        internal protected const byte CommandReplyRequestRejectedDifferentIdentd = 0x5d;
-
-        #endregion
-
         public IProxySettings Settings { get; set; }
 
-        public Socks4() { }
-
         /// <summary>
-        /// Create connection to destination host via proxy server.
+        ///     Create connection to destination host via proxy server.
         /// </summary>
         /// <param name="destinationHost">Host</param>
         /// <param name="destinationPort">Port</param>
         /// <param name="tcpClient">Connection with proxy server.</param>
         /// <returns>Connection to destination host</returns>
-        /// <exception cref="System.ArgumentException">Value of <paramref name="destinationHost"/> is <see langword="null"/> or empty.</exception>
-        /// <exception cref="System.ArgumentOutOfRangeException">Value of <paramref name="destinationPort"/> less than 1 or greater than 65535.</exception>
+        /// <exception cref="System.ArgumentException">
+        ///     Value of <paramref name="destinationHost" /> is <see langword="null" /> or
+        ///     empty.
+        /// </exception>
+        /// <exception cref="System.ArgumentOutOfRangeException">
+        ///     Value of <paramref name="destinationPort" /> less than 1 or
+        ///     greater than 65535.
+        /// </exception>
         /// <exception cref="ProxyException">Error while working with proxy.</exception>
         public TcpClient CreateConnection(string destinationHost, int destinationPort, TcpClient client)
         {
-            if (String.IsNullOrEmpty(destinationHost))
-            {
+            if (string.IsNullOrEmpty(destinationHost))
                 throw new ArgumentException(nameof(destinationHost));
-            }
 
             if (!ExceptionHelper.ValidateTcpPort(destinationPort))
-            {
                 throw new ArgumentOutOfRangeException(nameof(destinationPort));
-            }
 
             if (client == null && !client.Connected)
-            {
                 throw new SocketException();
-            }
 
             try
             {
@@ -86,9 +69,7 @@ namespace SocksSharp.Proxy
                 client.Close();
 
                 if (ex is IOException || ex is SocketException)
-                {
                     throw new ProxyException("Error while working with proxy", ex);
-                }
 
                 throw;
             }
@@ -96,27 +77,38 @@ namespace SocksSharp.Proxy
             return client;
         }
 
+        #region Constants (protected)
+
+        protected internal const int DefaultPort = 1080;
+
+        protected internal const byte VersionNumber = 4;
+        protected internal const byte CommandConnect = 0x01;
+        protected internal const byte CommandBind = 0x02;
+        protected internal const byte CommandReplyRequestGranted = 0x5a;
+        protected internal const byte CommandReplyRequestRejectedOrFailed = 0x5b;
+        protected internal const byte CommandReplyRequestRejectedCannotConnectToIdentd = 0x5c;
+        protected internal const byte CommandReplyRequestRejectedDifferentIdentd = 0x5d;
+
+        #endregion
+
         #region Methods (protected)
 
-        internal protected virtual void SendCommand(NetworkStream nStream, byte command, string destinationHost, int destinationPort)
+        protected internal virtual void SendCommand(NetworkStream nStream, byte command, string destinationHost,
+            int destinationPort)
         {
-            byte[] dstPort = GetIPAddressBytes(destinationHost);
-            byte[] dstIp = GetPortBytes(destinationPort);
+            var dstPort = GetIPAddressBytes(destinationHost);
+            var dstIp = GetPortBytes(destinationPort);
 
-            byte[] userId = new byte[0];
+            var userId = new byte[0];
             if (Settings.Credentials != null)
-            {
-                if (!String.IsNullOrEmpty(Settings.Credentials.UserName))
-                {
+                if (!string.IsNullOrEmpty(Settings.Credentials.UserName))
                     userId = Encoding.ASCII.GetBytes(Settings.Credentials.UserName);
-                }
-            }
 
             // +----+----+----+----+----+----+----+----+----+----+....+----+
             // | VN | CD | DSTPORT |      DSTIP        | USERID       |NULL|
             // +----+----+----+----+----+----+----+----+----+----+....+----+
             //    1    1      2              4           variable       1
-            byte[] request = new byte[9 + userId.Length];
+            var request = new byte[9 + userId.Length];
 
             request[0] = VersionNumber;
             request[1] = command;
@@ -131,58 +123,50 @@ namespace SocksSharp.Proxy
             // | VN | CD | DSTPORT |      DSTIP        |
             // +----+----+----+----+----+----+----+----+
             //   1    1       2              4
-            byte[] response = new byte[8];
+            var response = new byte[8];
 
             nStream.Read(response, 0, response.Length);
 
-            byte reply = response[1];
-            
+            var reply = response[1];
+
             if (reply != CommandReplyRequestGranted)
-            {
                 HandleCommandError(reply);
-            }
         }
 
-        internal protected byte[] GetIPAddressBytes(string destinationHost)
+        protected internal byte[] GetIPAddressBytes(string destinationHost)
         {
             IPAddress ipAddr = null;
 
             if (!IPAddress.TryParse(destinationHost, out ipAddr))
-            {
                 try
                 {
-                    IPAddress[] ips = Dns.GetHostAddresses(destinationHost);
+                    var ips = Dns.GetHostAddresses(destinationHost);
 
                     if (ips.Length > 0)
-                    {
                         ipAddr = ips[0];
-                    }
                 }
                 catch (Exception ex)
                 {
                     if (ex is SocketException || ex is ArgumentException)
-                    {
                         throw new ProxyException("Failed to get host address", ex);
-                    }
 
                     throw;
                 }
-            }
 
             return ipAddr.GetAddressBytes();
         }
 
-        internal protected byte[] GetPortBytes(int port)
+        protected internal byte[] GetPortBytes(int port)
         {
-            byte[] array = new byte[2];
+            var array = new byte[2];
 
-            array[0] = (byte)(port / 256);
-            array[1] = (byte)(port % 256);
+            array[0] = (byte) (port / 256);
+            array[1] = (byte) (port % 256);
 
             return array;
         }
 
-        internal protected void HandleCommandError(byte command)
+        protected internal void HandleCommandError(byte command)
         {
             string errorMessage;
 

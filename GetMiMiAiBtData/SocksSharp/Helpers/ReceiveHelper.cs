@@ -28,14 +28,20 @@ namespace SocksSharp.Helpers
 {
     internal sealed class ReceiveHelper
     {
+        public ReceiveHelper(int bufferSize)
+        {
+            this.bufferSize = bufferSize;
+            buffer = new byte[bufferSize];
+        }
+
         #region Fields
 
         private const int InitialLineSize = 1000;
 
         private Stream stream;
 
-        private byte[] buffer;
-        private int bufferSize;
+        private readonly byte[] buffer;
+        private readonly int bufferSize;
 
         private int linePosition;
         private byte[] lineBuffer = new byte[InitialLineSize];
@@ -44,25 +50,13 @@ namespace SocksSharp.Helpers
 
         #region Properties
 
-        public bool HasData
-        {
-            get
-            {
-                return (Length - Position) != 0;
-            }
-        }
+        public bool HasData => Length - Position != 0;
 
         public int Length { get; private set; }
 
         public int Position { get; private set; }
 
         #endregion
-        
-        public ReceiveHelper( int bufferSize)
-        {
-            this.bufferSize = bufferSize;
-            buffer = new byte[bufferSize];
-        }
 
         #region Methods
 
@@ -87,26 +81,22 @@ namespace SocksSharp.Helpers
                     Length = stream.Read(buffer, 0, bufferSize);
 
                     if (Length == 0)
-                    {
                         break;
-                    }
                 }
 
-                byte b = buffer[Position++];
+                var b = buffer[Position++];
 
                 lineBuffer[linePosition++] = b;
 
                 // Если считан символ '\n'.
                 if (b == 10)
-                {
                     break;
-                }
 
                 // Если достигнут максимальный предел размера буфера линии.
                 if (linePosition == lineBuffer.Length)
                 {
                     // Увеличиваем размер буфера линии в два раза.
-                    byte[] newLineBuffer = new byte[lineBuffer.Length * 2];
+                    var newLineBuffer = new byte[lineBuffer.Length * 2];
 
                     lineBuffer.CopyTo(newLineBuffer, 0);
                     lineBuffer = newLineBuffer;
@@ -118,12 +108,10 @@ namespace SocksSharp.Helpers
 
         public int Read(byte[] buffer, int index, int length)
         {
-            int curLength = Length - Position;
+            var curLength = Length - Position;
 
             if (curLength > length)
-            {
                 curLength = length;
-            }
 
             Array.Copy(this.buffer, Position, buffer, index, curLength);
 
@@ -131,7 +119,7 @@ namespace SocksSharp.Helpers
 
             return curLength;
         }
-        
+
         #endregion
     }
 }
