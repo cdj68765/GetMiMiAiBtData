@@ -14,7 +14,8 @@ namespace GetMiMiAiBtData
                {
                    var Data = net.GetHtml("http://www.mimirrr.com/forumdisplay.php?fid=55&page=1");
                }*/
-            var net = new NetConnect
+
+         var net = new NetConnect
             {
                 TryDirectFirst = true,
                 ConnectWithProxy = true
